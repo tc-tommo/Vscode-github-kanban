@@ -1,0 +1,46 @@
+{
+  "name": "github-kanban-viewer",
+  "displayName": "GitHub Kanban Viewer",
+  "description": "Open and manage a GitHub Projects (v2) Kanban board inside VS Code.",
+  "version": "0.0.3",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:githubKanban.openBoard"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "GitHub Kanban Viewer",
+      "properties": {
+        "githubKanban.url": {
+          "type": "string",
+          "default": "",
+          "description": "GitHub Projects Kanban view URL to open in VS Code Simple Browser (e.g. https://github.com/orgs/<org>/projects/<number>/views/<viewId>)."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "githubKanban.openBoard",
+        "title": "GitHub Kanban: Open Board"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@types/vscode": "^1.95.0",
+    "typescript": "^6.0.2",
+    "vsce": "^2.15.0"
+  }
+}

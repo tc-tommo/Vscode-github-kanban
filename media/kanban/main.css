@@ -1,0 +1,98 @@
+body {
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family);
+  margin: 0;
+}
+
+.topbar {
+  align-items: center;
+  border-bottom: 1px solid var(--vscode-editorWidget-border);
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.topbar h2 {
+  font-size: 14px;
+  margin: 0;
+}
+
+button {
+  background: var(--vscode-button-background);
+  border: none;
+  color: var(--vscode-button-foreground);
+  cursor: pointer;
+  padding: 6px 10px;
+}
+
+button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.status {
+  margin: 10px 12px;
+}
+
+.board {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 12px;
+}
+
+.column {
+  background: var(--vscode-sideBar-background);
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 4px;
+  min-height: 240px;
+  min-width: 260px;
+  padding: 8px;
+}
+
+.column h3 {
+  font-size: 13px;
+  margin: 0 0 8px 0;
+}
+
+.card-list {
+  min-height: 180px;
+}
+
+.card {
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 4px;
+  cursor: grab;
+  margin-bottom: 8px;
+  position: relative;
+  padding: 8px;
+  padding-right: 28px;
+}
+
+.card.dragging {
+  opacity: 0.5;
+}
+
+.card-title {
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.card-meta {
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+.card-type-icon {
+  color: var(--vscode-sideBar-background);
+  font-size: 12px;
+  position: absolute;
+  right: 8px;
+  top: 8px;
+}
+
+.drop-target {
+  outline: 2px dashed var(--vscode-focusBorder);
+}
+
