@@ -2,7 +2,7 @@
   "name": "github-kanban-viewer",
   "displayName": "GitHub Kanban Viewer",
   "description": "Open and manage a GitHub Projects (v2) Kanban board inside VS Code.",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "publisher": "TommoChung",
   "engines": {
     "vscode": "^1.95.0"

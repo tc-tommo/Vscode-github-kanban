@@ -4,6 +4,9 @@
   let board = null;
   let draggingItemId = null;
   const pendingMoves = new Map();
+  const selectedItemIds = new Set();
+  let lastSelectedItemId = null;
+  let orderedCardIds = [];
 
   const titleEl = document.getElementById('board-title');
   const statusEl = document.getElementById('status');
@@ -12,6 +15,13 @@
 
   refreshBtn.addEventListener('click', () => {
     vscode.postMessage({ type: 'refreshRequested' });
+  });
+  boardEl.addEventListener('click', (event) => {
+    if (event.target === boardEl) {
+      selectedItemIds.clear();
+      lastSelectedItemId = null;
+      renderBoard();
+    }
   });
 
   window.addEventListener('message', (event) => {
@@ -70,6 +80,7 @@
     if (!board) {
       return;
     }
+    orderedCardIds = [];
 
     const unassigned = {
       optionId: '__UNASSIGNED__',
@@ -98,26 +109,7 @@
       cardList.addEventListener('drop', (event) => {
         event.preventDefault();
         cardList.classList.remove('drop-target');
-        if (!draggingItemId || column.optionId === '__UNASSIGNED__') {
-          return;
-        }
-        const card = board.cards.find((c) => c.itemId === draggingItemId);
-        if (!card || card.statusOptionId === column.optionId) {
-          return;
-        }
-        pendingMoves.set(draggingItemId, {
-          previousOptionId: card.statusOptionId,
-          previousStatusName: card.statusName,
-          targetOptionId: column.optionId,
-        });
-        card.statusOptionId = column.optionId;
-        card.statusName = column.name;
-        renderBoard();
-        vscode.postMessage({
-          type: 'moveCard',
-          itemId: draggingItemId,
-          targetOptionId: column.optionId,
-        });
+        applyDropMove(column.optionId);
       });
 
       const cards = board.cards.filter((card) => {
@@ -128,17 +120,32 @@
       });
 
       for (const card of cards) {
+        orderedCardIds.push(card.itemId);
         const cardEl = document.createElement('article');
         cardEl.className = 'card';
+        if (selectedItemIds.has(card.itemId)) {
+          cardEl.classList.add('selected');
+        }
         cardEl.draggable = true;
+        cardEl.addEventListener('click', (event) => {
+          if (event.target instanceof HTMLAnchorElement) {
+            return;
+          }
+          handleCardSelection(event, card.itemId);
+        });
         cardEl.addEventListener('dragstart', (event) => {
+          if (!selectedItemIds.has(card.itemId)) {
+            selectedItemIds.clear();
+            selectedItemIds.add(card.itemId);
+            lastSelectedItemId = card.itemId;
+          }
           draggingItemId = card.itemId;
           cardEl.classList.add('dragging');
-          const payload = formatCardDropText(card);
+          const payload = formatCardDropText(getSelectedOrDraggedCards(card.itemId));
           if (event.dataTransfer) {
             event.dataTransfer.effectAllowed = 'copyMove';
             event.dataTransfer.setData('text/plain', payload);
-            if (card.url) {
+            if (card.url && getSelectedOrDraggedCards(card.itemId).length === 1) {
               event.dataTransfer.setData('text/uri-list', card.url);
             }
           }
@@ -193,11 +200,93 @@
     return 'fa-solid fa-circle-question';
   }
 
-  function formatCardDropText(card) {
-    if (card.url) {
-      return `[GitHub Project item][${card.contentType}]: ${card.title} (${card.url})`;
+  function formatCardDropText(cards) {
+    if (!cards.length) {
+      return 'GitHub Project items';
     }
-    return `[GitHub Project item][${card.contentType}]: ${card.title}`;
+    if (cards.length === 1) {
+      const card = cards[0];
+      if (card.url) {
+        return `[GitHub Project item][${card.contentType}]: ${card.title} (${card.url})`;
+      }
+      return `[GitHub Project item][${card.contentType}]: ${card.title}`;
+    }
+
+    const lines = [
+      `GitHub Project items (${cards.length})`,
+      ...cards.map((card, idx) => `${idx + 1}. [${card.contentType}] ${card.title}${card.url ? ` (${card.url})` : ''}`),
+    ];
+    return lines.join('\n');
+  }
+
+  function getSelectedOrDraggedCards(fallbackItemId) {
+    const ids = selectedItemIds.size ? Array.from(selectedItemIds) : [fallbackItemId];
+    return ids
+      .map((id) => board.cards.find((card) => card.itemId === id))
+      .filter(Boolean);
+  }
+
+  function handleCardSelection(event, itemId) {
+    if (event.shiftKey && lastSelectedItemId) {
+      const from = orderedCardIds.indexOf(lastSelectedItemId);
+      const to = orderedCardIds.indexOf(itemId);
+      if (from >= 0 && to >= 0) {
+        selectedItemIds.clear();
+        const [start, end] = from < to ? [from, to] : [to, from];
+        for (let i = start; i <= end; i += 1) {
+          selectedItemIds.add(orderedCardIds[i]);
+        }
+        renderBoard();
+        return;
+      }
+    }
+
+    if (event.ctrlKey || event.metaKey) {
+      if (selectedItemIds.has(itemId)) {
+        selectedItemIds.delete(itemId);
+      } else {
+        selectedItemIds.add(itemId);
+      }
+      lastSelectedItemId = itemId;
+      renderBoard();
+      return;
+    }
+
+    selectedItemIds.clear();
+    selectedItemIds.add(itemId);
+    lastSelectedItemId = itemId;
+    renderBoard();
+  }
+
+  function applyDropMove(targetOptionId) {
+    if (!board || !draggingItemId || targetOptionId === '__UNASSIGNED__') {
+      return;
+    }
+
+    const idsToMove = selectedItemIds.size
+      ? Array.from(selectedItemIds)
+      : [draggingItemId];
+
+    const targetColumn = board.columns.find((column) => column.optionId === targetOptionId);
+    for (const itemId of idsToMove) {
+      const card = board.cards.find((c) => c.itemId === itemId);
+      if (!card || card.statusOptionId === targetOptionId) {
+        continue;
+      }
+      pendingMoves.set(itemId, {
+        previousOptionId: card.statusOptionId,
+        previousStatusName: card.statusName,
+        targetOptionId,
+      });
+      card.statusOptionId = targetOptionId;
+      card.statusName = targetColumn ? targetColumn.name : card.statusName;
+      vscode.postMessage({
+        type: 'moveCard',
+        itemId,
+        targetOptionId,
+      });
+    }
+    renderBoard();
   }
 })();
 
