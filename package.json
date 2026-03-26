@@ -3,7 +3,7 @@
   "displayName": "GitHub Kanban Viewer",
   "description": "Open and manage a GitHub Projects (v2) Kanban board inside VS Code.",
   "version": "0.0.3",
-  "publisher": "local",
+  "publisher": "TommoChung",
   "engines": {
     "vscode": "^1.95.0"
   },
@@ -21,7 +21,7 @@
         "githubKanban.url": {
           "type": "string",
           "default": "",
-          "description": "GitHub Projects Kanban view URL to open in VS Code Simple Browser (e.g. https://github.com/orgs/<org>/projects/<number>/views/<viewId>)."
+          "description": "GitHub Projects v2 URL to open in the integrated Kanban view. If empty, the extension tries to auto-detect a project from the workspace repository remote."
         }
       }
     },

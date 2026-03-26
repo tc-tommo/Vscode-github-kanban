@@ -26,6 +26,12 @@ export type KanbanBoard = {
   cards: KanbanCard[];
 };
 
+export type RepositoryProject = {
+  title: string;
+  number: number;
+  url: string;
+};
+
 type GraphQlError = { message?: string };
 
 export function parseProjectTarget(urlStr: string): ProjectTarget | undefined {
@@ -258,5 +264,67 @@ export function validateKanbanUrl(urlStr: string): { ok: true } | { ok: false; r
 
 export async function getRequiredGitHubSession(scopes: string[]): Promise<vscode.AuthenticationSession> {
   return vscode.authentication.getSession('github', scopes, { createIfNone: true });
+}
+
+export function parseGitHubRemoteUrl(remoteUrl: string): { owner: string; repo: string } | undefined {
+  const trimmed = remoteUrl.trim();
+
+  // https://github.com/owner/repo(.git)
+  const httpsMatch = /^https:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/i.exec(trimmed);
+  if (httpsMatch) {
+    return { owner: httpsMatch[1], repo: httpsMatch[2] };
+  }
+
+  // git@github.com:owner/repo(.git)
+  const sshMatch = /^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/i.exec(trimmed);
+  if (sshMatch) {
+    return { owner: sshMatch[1], repo: sshMatch[2] };
+  }
+
+  return undefined;
+}
+
+export async function listRepositoryProjects(
+  accessToken: string,
+  owner: string,
+  repo: string
+): Promise<RepositoryProject[]> {
+  const query = `
+    query($owner: String!, $name: String!) {
+      repository(owner: $owner, name: $name) {
+        owner {
+          __typename
+          login
+        }
+        projectsV2(first: 20) {
+          nodes {
+            title
+            number
+          }
+        }
+      }
+    }
+  `;
+
+  const payload = await callGraphQl<{
+    repository: {
+      owner: { __typename: 'Organization' | 'User'; login: string };
+      projectsV2: { nodes: Array<{ title: string; number: number }> };
+    } | null;
+  }>(accessToken, query, { owner, name: repo });
+
+  if (!payload.repository) {
+    return [];
+  }
+
+  const ownerType = payload.repository.owner.__typename;
+  const ownerLogin = payload.repository.owner.login;
+  const basePath = ownerType === 'Organization' ? `orgs/${ownerLogin}` : `users/${ownerLogin}`;
+
+  return payload.repository.projectsV2.nodes.map((project) => ({
+    title: project.title,
+    number: project.number,
+    url: `https://github.com/${basePath}/projects/${project.number}`,
+  }));
 }
 

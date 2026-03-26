@@ -1,8 +1,12 @@
 import * as vscode from 'vscode';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import {
   getRequiredGitHubSession,
+  listRepositoryProjects,
   loadKanbanBoard,
   moveCardStatus,
+  parseGitHubRemoteUrl,
   parseProjectTarget,
   validateKanbanUrl,
   KanbanBoard,
@@ -12,12 +16,60 @@ import { KanbanPanel, WebviewInboundMessage } from './webview/kanbanPanel';
 const CONFIG_SECTION = 'githubKanban';
 const CONFIG_URL_PATH = `${CONFIG_SECTION}.url`;
 const GITHUB_SCOPES = ['repo', 'project'];
+const execFileAsync = promisify(execFile);
 
 function getConfiguredUrl(): string | undefined {
   const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
   const url = config.get<string>('url');
   const trimmed = (url ?? '').trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+async function getWorkspaceOriginRemote(): Promise<string | undefined> {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  if (!folder) {
+    return undefined;
+  }
+
+  try {
+    const { stdout } = await execFileAsync('git', ['-C', folder.uri.fsPath, 'remote', 'get-url', 'origin']);
+    const value = stdout.trim();
+    return value.length > 0 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function detectProjectUrlFromWorkspace(accessToken: string): Promise<string | undefined> {
+  const remote = await getWorkspaceOriginRemote();
+  if (!remote) {
+    return undefined;
+  }
+
+  const repo = parseGitHubRemoteUrl(remote);
+  if (!repo) {
+    return undefined;
+  }
+
+  const projects = await listRepositoryProjects(accessToken, repo.owner, repo.repo);
+  if (projects.length === 0) {
+    return undefined;
+  }
+  if (projects.length === 1) {
+    return projects[0].url;
+  }
+
+  const picked = await vscode.window.showQuickPick(
+    projects.map((project) => ({
+      label: project.title,
+      description: `#${project.number}`,
+      detail: project.url,
+      url: project.url,
+    })),
+    { placeHolder: 'Select a GitHub Project from this workspace repository' }
+  );
+
+  return picked?.url;
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -85,27 +137,30 @@ export function activate(context: vscode.ExtensionContext) {
   };
 
   const disposable = vscode.commands.registerCommand('githubKanban.openBoard', async () => {
-    const urlStr = getConfiguredUrl();
-    if (!urlStr) {
-      const choice = await vscode.window.showErrorMessage(
-        'GitHub Kanban URL is not configured.',
-        'Open Settings'
-      );
-      if (choice === 'Open Settings') {
-        await vscode.commands.executeCommand('workbench.action.openSettings', CONFIG_URL_PATH);
-      }
-      return;
-    }
-
-    const validation = validateKanbanUrl(urlStr);
-    if (!validation.ok) {
-      await vscode.window.showErrorMessage(`Invalid URL: ${validation.reason}`);
-      return;
-    }
-
     try {
       const session = await getRequiredGitHubSession(GITHUB_SCOPES);
       accessToken = session.accessToken;
+      let urlStr = getConfiguredUrl();
+
+      if (!urlStr) {
+        urlStr = await detectProjectUrlFromWorkspace(accessToken);
+      }
+      if (!urlStr) {
+        const choice = await vscode.window.showErrorMessage(
+          'No GitHub project URL configured, and no project was auto-detected from workspace repository.',
+          'Open Settings'
+        );
+        if (choice === 'Open Settings') {
+          await vscode.commands.executeCommand('workbench.action.openSettings', CONFIG_URL_PATH);
+        }
+        return;
+      }
+
+      const validation = validateKanbanUrl(urlStr);
+      if (!validation.ok) {
+        await vscode.window.showErrorMessage(`Invalid URL: ${validation.reason}`);
+        return;
+      }
 
       if (panel) {
         panel.reveal();
